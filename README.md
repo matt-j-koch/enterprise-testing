@@ -24,7 +24,7 @@ The supplied bots can initiate one bid per turn and can burn eligible Assets onl
 
 Each bot evaluates all of its private contracts plus every public contract. It estimates distance as the required-Connection deficit plus the actions required to acquire or bid for the listed Asset, then targets the closest reachable contract (favoring its private contract only on an exact tie). Public contracts are not declared: once a bot meets one, it protects that position until its next turn, when the engine awards the win.
 
-Each player is limited to eight Connections. Bots remove a surplus Connection from a capacity-locked region when doing so reopens that region and leaves their currently relevant contract requirements intact; that ends their action phase as required by the rules.
+Each player is limited to eight Connections and may place only one Connection per turn. Bots remove a surplus Connection from a capacity-locked region when doing so reopens that region and leaves their currently relevant contract requirements intact; that ends their action phase as required by the rules.
 
 Burns now accept target fields directly in their action dictionaries. For example, `{"kind":"burn", "asset":"ARMS DEPOT", "target_asset":"..."}` seizes an Asset in a region where the bot has a Connection; `SMUGGLING RING` accepts two `{player, region}` values in `targets`; and `STATE-ALIGNED MILITIA` accepts a locked `region`. The supplied bots choose targets for the targetable burns they use, prioritizing the current leader for disruptive effects and their contract/economy for non-disruptive effects.
 

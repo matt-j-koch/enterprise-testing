@@ -59,6 +59,16 @@ def locked_region_exit(game: Game, player: str) -> list[dict]:
     if not candidates: return []
     return [{"kind":"remove","region":max(candidates,key=lambda r:(p.connections[r],r))}]
 
+def one_connection(actions: list[dict]) -> list[dict]:
+    """Keep only the first Connection placement, matching the per-turn rule."""
+    placed=False; result=[]
+    for action in actions:
+        if action["kind"]=="place":
+            if placed: continue
+            placed=True
+        result.append(action)
+    return result
+
 def opportunistic_burn(game: Game, player: str, disruptive: bool = False) -> list[dict]:
     """Return one legal, target-complete burn action with deterministic priorities."""
     p=game.players[player]
@@ -116,7 +126,7 @@ class ContractRushBot:
         if exit_action: return exit_action
         choice=closest_contract(game,player)
         actions=goal_actions(game,player,choice[0]) if choice else []
-        return (actions + opportunistic_burn(game, player))[:4]
+        return one_connection(actions + opportunistic_burn(game, player))[:4]
 
 class IncomeBot:
     """Builds in low-congestion regions and buys the cheapest legal asset."""
@@ -139,7 +149,7 @@ class IncomeBot:
         # Contest an affordable, high-upkeep asset only after building the income base.
         targets=[a for a in ASSET if legal_bid_target(game, player, a) and p.influence>=ASSET[a].upkeep+2]
         if targets: actions.append({"kind":"bid", "asset":max(targets,key=lambda a:(ASSET[a].upkeep,a))})
-        return (actions + opportunistic_burn(game, player))[:4]
+        return one_connection(actions + opportunistic_burn(game, player))[:4]
 
 class DisruptorBot:
     """Uses destructive Operations cards, otherwise blocks the leading player."""
@@ -169,4 +179,4 @@ class DisruptorBot:
         if choices: actions.append({"kind":"place","region":min(choices,key=game.total_connections)})
         target_assets=[a for a in game.players[target].assets if legal_bid_target(game, player, a)]
         if target_assets and p.influence>=2: actions.append({"kind":"bid","asset":max(target_assets,key=lambda a:(ASSET[a].upkeep,a))})
-        return (actions + opportunistic_burn(game, player, disruptive=True))[:4]
+        return one_connection(actions + opportunistic_burn(game, player, disruptive=True))[:4]

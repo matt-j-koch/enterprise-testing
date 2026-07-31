@@ -32,7 +32,7 @@ class Player:
     contracts: list[ContractSpec] = field(default_factory=list); fulfilled: int = 0
     first_turn_done: bool = False; pending_contract: ContractSpec | None = None
     returned_this_turn: set[str] = field(default_factory=set)
-    acquisitions_this_turn: int = 0; removed_voluntarily_this_turn: bool = False
+    acquisitions_this_turn: int = 0; placements_this_turn: int = 0; removed_voluntarily_this_turn: bool = False
     bids_initiated_this_turn: int = 0; assets_at_previous_turn: set[str] = field(default_factory=set)
     original_contracts: list[ContractSpec] = field(default_factory=list)
 
@@ -133,11 +133,13 @@ class Game:
         p=self.players[n]
         if region not in REGIONS or self.locked(region): raise IllegalMove("region is locked")
         if not free and p.removed_voluntarily_this_turn: raise IllegalMove("cannot place after voluntarily removing a connection")
+        if not free and p.placements_this_turn: raise IllegalMove("only one connection may be placed per turn")
         if p.connections.total() >= MAX_CONNECTIONS_PER_PLAYER: raise IllegalMove("player connection limit reached")
         cost=0 if free or not p.connections.total() else 1+self.region_costs.get(region,(0,0))[0]
         if p.influence<cost: raise IllegalMove("need influence for connection")
         p.influence-=cost
         p.connections[region]+=1
+        if not free: p.placements_this_turn+=1
         if trigger and self.total_connections(region)==self.capacity: self._trigger_lockdown(n,region)
     def place(self,n:str,region:str) -> None: self._place(self._require_turn(n).name,region)
     def remove(self,n:str,region:str,amount:int=1,voluntary:bool=True) -> None:
@@ -303,7 +305,7 @@ class Game:
             self.event_log.append(f"{n} burned {asset}: {effect}; target={target}")
         self._return_asset(n,asset)
     def begin_turn(self) -> None:
-        n=self.current(); p=self.players[n]; self.turn_no+=1; p.returned_this_turn.clear(); p.acquisitions_this_turn=0; p.removed_voluntarily_this_turn=False; p.bids_initiated_this_turn=0
+        n=self.current(); p=self.players[n]; self.turn_no+=1; p.returned_this_turn.clear(); p.acquisitions_this_turn=0; p.placements_this_turn=0; p.removed_voluntarily_this_turn=False; p.bids_initiated_this_turn=0
         self.forced_locks={r:expiry for r,expiry in self.forced_locks.items() if expiry>self.turn_no}
         self.region_costs={r:rule for r,rule in self.region_costs.items() if rule[1]>self.turn_no}
         self.bid_blocked={x:expiry for x,expiry in self.bid_blocked.items() if expiry>self.turn_no}

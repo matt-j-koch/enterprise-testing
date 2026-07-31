@@ -64,6 +64,12 @@ class EngineTests(unittest.TestCase):
         p=g.players["A"]; p.connections.clear(); p.connections["ASIA"]=MAX_CONNECTIONS_PER_PLAYER
         with self.assertRaises(IllegalMove): g.place("A","EUROPE")
 
+    def test_only_one_connection_can_be_placed_per_turn(self):
+        g=Game(["A","B"],seed=5)
+        g.players["A"].connections.clear(); g.players["A"].influence=3
+        g.place("A","EUROPE")
+        with self.assertRaises(IllegalMove): g.place("A","USSR")
+
     def test_bot_removes_surplus_to_reopen_capacity_lock(self):
         g=Game(["A","B"],seed=6)
         for p in g.players.values(): p.connections.clear()
