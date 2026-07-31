@@ -152,9 +152,19 @@ class IncomeBot:
         return one_connection(actions + opportunistic_burn(game, player))[:4]
 
 class DisruptorBot:
-    """Uses destructive Operations cards, otherwise blocks the leading player."""
+    """Builds toward its own contract first, defends what it owns, and spends any
+    leftover action budget disrupting the leader."""
     def bid(self, game, bidder, defender, asset):
-        return game.players[bidder].influence if asset in game.players[defender].assets else 0
+        p=game.players[bidder]
+        if asset in p.assets:
+            # Defending: pay everything for an asset my own contract needs, otherwise
+            # contest it without emptying the bank.
+            needed=any(asset==c.asset for c in p.contracts)
+            return p.influence if needed else p.influence//2
+        # Attacking: commit half my influence. choose_actions only initiates bids worth
+        # winning, but going all-in would leave nothing for the next turn or two, which
+        # this game can't spare.
+        return p.influence//2
     def choose_actions(self, game, player):
         p=game.players[player]
         declarations=[{"kind":"declare","c":c} for c in p.contracts if game.contract_met(player,c)]
@@ -166,17 +176,85 @@ class DisruptorBot:
         if exit_action: return exit_action
         choice=closest_contract(game,player)
         actions=goal_actions(game,player,choice[0]) if choice else []
+        legal_assets=[a for a in game.pool if (ASSET[a].region is None or p.connections[ASSET[a].region]) and p.influence>=ASSET[a].upkeep]
+        if not actions and legal_assets: actions.append({"kind":"acquire","asset":min(legal_assets,key=lambda a:(ASSET[a].upkeep,a))})
+        # Keep growing the board before spending the turn on cards, so contract progress
+        # isn't crowded out of the 4-action budget by busywork.
+        open_regions=sorted((r for r in REGIONS if not game.locked(r) and game.total_connections(r)<game.capacity-1),key=game.total_connections)
+        actions.extend({"kind":"place","region":r} for r in open_regions[:2])
         if "Regime Change" in p.hand:
             regions=sorted(REGIONS, key=lambda r:game.players[target].connections[r], reverse=True)
             if game.players[target].connections[regions[0]]: actions.append({"kind":"play_op","card":"Regime Change","region":regions[0]})
+        elif "Shakedown" in p.hand and game.players[target].influence:
+            actions.append({"kind":"play_op","card":"Shakedown","player":target})
         elif "Asset Seizure" in p.hand and game.players[target].connections.total():
             actions.append({"kind":"play_op","card":"Asset Seizure","player":target})
+        elif "Congressional Inquiry" in p.hand and not game.congress:
+            region=max(REGIONS, key=lambda r:(game.players[target].connections[r], -p.connections[r]))
+            if game.players[target].connections[region]: actions.append({"kind":"play_op","card":"Congressional Inquiry","region":region})
         elif "Sanctions" in p.hand:
             actions.append({"kind":"play_op","card":"Sanctions","player":target})
-        elif p.influence: actions.append({"kind":"buy_op"})
-        # Make a connection only where it does not immediately lock a region.
-        choices=[r for r in REGIONS if not game.locked(r) and game.total_connections(r)<game.capacity-1]
-        if choices: actions.append({"kind":"place","region":min(choices,key=game.total_connections)})
+        elif "Internal Purge" in p.hand and game.players[target].hand:
+            actions.append({"kind":"play_op","card":"Internal Purge","player":target})
+        elif "Shell Company" in p.hand:
+            actions.append({"kind":"play_op","card":"Shell Company"})
+        elif len(p.hand)<3 and p.influence: actions.append({"kind":"buy_op"})
+        # Prefer stealing the asset the leader actually needs to win; fall back to its
+        # highest-upkeep asset otherwise.
         target_assets=[a for a in game.players[target].assets if legal_bid_target(game, player, a)]
-        if target_assets and p.influence>=2: actions.append({"kind":"bid","asset":max(target_assets,key=lambda a:(ASSET[a].upkeep,a))})
-        return one_connection(actions + opportunistic_burn(game, player, disruptive=True))[:4]
+        if target_assets and p.influence>=2:
+            wanted={c.asset for c in game.players[target].contracts+game.public_contracts}
+            priority=[a for a in target_assets if a in wanted] or target_assets
+            actions.append({"kind":"bid","asset":max(priority,key=lambda a:(ASSET[a].upkeep,a))})
+        return (actions + opportunistic_burn(game, player, disruptive=True))[:4]
+
+class OpportunistBot:
+    """Builds economy like IncomeBot, but turns disruptive for a turn when a rival is
+    one action from winning: bids away the asset their contract needs and plays
+    whatever disruptive card it happens to already be holding. It never dedicates
+    actions to hunting for disruption tools the way DisruptorBot does."""
+    def bid(self, game, bidder, defender, asset):
+        p=game.players[bidder]
+        if asset in p.assets and any(asset==c.asset for c in p.contracts):
+            return p.influence  # defend an asset my own contract needs
+        return p.influence // 2
+    def choose_actions(self, game, player):
+        p=game.players[player]
+        declarations=[{"kind":"declare","c":c} for c in p.contracts if game.contract_met(player,c)]
+        if declarations: return declarations
+        if any(game.contract_met(player,c) for c in game.public_contracts): return []
+        exit_action=locked_region_exit(game,player)
+        if exit_action: return exit_action
+        choice=closest_contract(game,player)
+        actions=goal_actions(game,player,choice[0]) if choice else []
+        legal_assets=[a for a in game.pool if (ASSET[a].region is None or p.connections[ASSET[a].region]) and p.influence>=ASSET[a].upkeep]
+        if not actions and legal_assets: actions.append({"kind":"acquire", "asset":min(legal_assets, key=lambda a:(ASSET[a].upkeep,a))})
+        open_regions=[r for r in REGIONS if not game.locked(r)]
+        open_regions.sort(key=lambda r:(game.total_connections(r), r))
+        actions.extend({"kind":"place", "region":r} for r in open_regions[:2])
+ 
+        rivals=sorted((x for x in game.players if x!=player), key=lambda x:(len(game.players[x].assets),game.players[x].connections.total(),game.players[x].influence), reverse=True)
+        leader=rivals[0]
+        leader_choice=closest_contract(game,leader)
+        threatened=leader_choice is not None and contract_distance(game,leader,leader_choice[0])<=1
+ 
+        if threatened:
+            card=next((c for c in ("Regime Change","Shakedown","Asset Seizure","Sanctions") if c in p.hand),None)
+            if card=="Regime Change":
+                regions=sorted(REGIONS, key=lambda r:game.players[leader].connections[r], reverse=True)
+                if game.players[leader].connections[regions[0]]: actions.append({"kind":"play_op","card":card,"region":regions[0]})
+            elif card=="Shakedown" and game.players[leader].influence:
+                actions.append({"kind":"play_op","card":card,"player":leader})
+            elif card=="Asset Seizure" and game.players[leader].connections.total():
+                actions.append({"kind":"play_op","card":card,"player":leader})
+            elif card=="Sanctions":
+                actions.append({"kind":"play_op","card":card,"player":leader})
+            wanted=leader_choice[0].asset
+            if wanted in game.players[leader].assets and legal_bid_target(game,player,wanted) and p.influence>=2:
+                actions.append({"kind":"bid","asset":wanted})
+        else:
+            # Contest an affordable, high-upkeep asset only after building the income base.
+            targets=[a for a in ASSET if legal_bid_target(game, player, a) and p.influence>=ASSET[a].upkeep+2]
+            if targets: actions.append({"kind":"bid", "asset":max(targets,key=lambda a:(ASSET[a].upkeep,a))})
+ 
+        return (actions + opportunistic_burn(game, player, disruptive=threatened))[:4]

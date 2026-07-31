@@ -1,10 +1,10 @@
 """Run a reproducible four-seat bot tournament: python simulate_four_players.py"""
 from collections import Counter
 from enterprise import Game, contract_id
-from bots import ContractRushBot, DisruptorBot, IncomeBot, SeatPolicies
+from bots import ContractRushBot, DisruptorBot, IncomeBot, OpportunistBot, SeatPolicies
 
 SEATS = ["Rush", "Income", "Disrupt", "Income 2"]
-POLICY = SeatPolicies({"Rush":ContractRushBot(), "Income":IncomeBot(), "Disrupt":DisruptorBot(), "Income 2":IncomeBot()})
+POLICY = SeatPolicies({"Rush":ContractRushBot(), "Income":IncomeBot(), "Disrupt":DisruptorBot(), "Opportunist":OpportunistBot()})
 
 def run(games=1_000, max_turns=300):
     wins, turns, contracts, assets, origin = Counter(), [], Counter(), Counter(), Counter()
