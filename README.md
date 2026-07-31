@@ -18,7 +18,7 @@ winner = game.run(GreedyBot(), max_turns=1_000)
 print(winner, game.turn_no)
 ```
 
-For four-player testing, run `python simulate_four_players.py`. Flags are included for --seats, --games, and --max-turns. You can now pass any combination and length of seats. Its report includes win shares, player-turn and round length, each winning contract/required Asset, and whether the winning contract was private, a public contract won by its original holder, or a public contract won by another player. The policies live in `bots.py` and can also be mixed per seat via `SeatPolicies`.
+For four-player testing, run `python simulate_four_players.py`. It pits a contract-rush bot, an income builder, a disruption-focused bot, and a second income builder over 1,000 deterministic seeds by default. Its report includes win shares, player-turn and round length, each winning contract/required Asset, and whether the winning contract was private, a public contract won by its original holder, or a public contract won by another player. The policies live in `bots.py` and can also be mixed per seat via `SeatPolicies`.
 
 The supplied bots can initiate one bid per turn and can burn eligible Assets only after holding them through a prior turn.
 
