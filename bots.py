@@ -47,6 +47,18 @@ def goal_actions(game: Game, player: str, contract) -> list[dict]:
             actions.append({"kind":"place","region":region})
     return actions
 
+def locked_region_exit(game: Game, player: str) -> list[dict]:
+    """Remove one surplus Connection to reopen a capacity-locked region."""
+    p=game.players[player]; contracts=p.contracts+game.public_contracts; candidates=[]
+    for region in REGIONS:
+        required=max((c.needs.get(region,0) for c in contracts),default=0)
+        # Congress and forced locks cannot be solved by removing a Connection.
+        if (game.total_connections(region)==game.capacity and game.congress!=region
+                and region not in game.forced_locks and p.connections[region]>=2
+                and p.connections[region]-1>=required): candidates.append(region)
+    if not candidates: return []
+    return [{"kind":"remove","region":max(candidates,key=lambda r:(p.connections[r],r))}]
+
 def opportunistic_burn(game: Game, player: str, disruptive: bool = False) -> list[dict]:
     """Return one legal, target-complete burn action with deterministic priorities."""
     p=game.players[player]
@@ -100,6 +112,8 @@ class ContractRushBot:
             if game.contract_met(player, contract): return [{"kind":"declare", "c":contract}]
         # A public contract needs no declaration: meeting it now wins at this player's next turn.
         if any(game.contract_met(player,c) for c in game.public_contracts): return []
+        exit_action=locked_region_exit(game,player)
+        if exit_action: return exit_action
         choice=closest_contract(game,player)
         actions=goal_actions(game,player,choice[0]) if choice else []
         return (actions + opportunistic_burn(game, player))[:4]
@@ -113,6 +127,8 @@ class IncomeBot:
         declarations=[{"kind":"declare","c":c} for c in p.contracts if game.contract_met(player,c)]
         if declarations: return declarations
         if any(game.contract_met(player,c) for c in game.public_contracts): return []
+        exit_action=locked_region_exit(game,player)
+        if exit_action: return exit_action
         choice=closest_contract(game,player)
         actions=goal_actions(game,player,choice[0]) if choice else []
         legal_assets=[a for a in game.pool if (ASSET[a].region is None or p.connections[ASSET[a].region]) and p.influence>=ASSET[a].upkeep]
@@ -136,6 +152,8 @@ class DisruptorBot:
         rivals=sorted((x for x in game.players if x!=player), key=lambda x:(len(game.players[x].assets),game.players[x].connections.total(),game.players[x].influence), reverse=True)
         target=rivals[0]
         if any(game.contract_met(player,c) for c in game.public_contracts): return []
+        exit_action=locked_region_exit(game,player)
+        if exit_action: return exit_action
         choice=closest_contract(game,player)
         actions=goal_actions(game,player,choice[0]) if choice else []
         if "Regime Change" in p.hand:

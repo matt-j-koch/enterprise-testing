@@ -11,6 +11,7 @@ from random import Random
 from typing import Any, Protocol
 
 REGIONS = ("LATIN AMERICA", "EUROPE", "USSR", "AFRICA", "MIDEAST", "ASIA")
+MAX_CONNECTIONS_PER_PLAYER = 8
 LOCKDOWN = {
     "LATIN AMERICA": "influence", "MIDEAST": "influence",
     "AFRICA": "remove", "ASIA": "remove", "EUROPE": "discard", "USSR": "discard",
@@ -132,6 +133,7 @@ class Game:
         p=self.players[n]
         if region not in REGIONS or self.locked(region): raise IllegalMove("region is locked")
         if not free and p.removed_voluntarily_this_turn: raise IllegalMove("cannot place after voluntarily removing a connection")
+        if p.connections.total() >= MAX_CONNECTIONS_PER_PLAYER: raise IllegalMove("player connection limit reached")
         cost=0 if free or not p.connections.total() else 1+self.region_costs.get(region,(0,0))[0]
         if p.influence<cost: raise IllegalMove("need influence for connection")
         p.influence-=cost

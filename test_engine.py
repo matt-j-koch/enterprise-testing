@@ -1,6 +1,6 @@
 import unittest
-from enterprise import Game, GreedyBot, IllegalMove, REGIONS, ContractSpec
-from bots import closest_contract
+from enterprise import Game, GreedyBot, IllegalMove, REGIONS, ContractSpec, MAX_CONNECTIONS_PER_PLAYER
+from bots import closest_contract, locked_region_exit
 
 class EngineTests(unittest.TestCase):
     def test_lockdown_blocks_income_and_new_connection(self):
@@ -58,5 +58,17 @@ class EngineTests(unittest.TestCase):
         public=ContractSpec("CARTEL NETWORK", {"LATIN AMERICA":2,"EUROPE":1})
         p.contracts=[private]; g.public_contracts=[public]
         self.assertEqual(closest_contract(g,"A"),(public,False))
+
+    def test_connection_cap_is_eight(self):
+        g=Game(["A","B"],seed=5)
+        p=g.players["A"]; p.connections.clear(); p.connections["ASIA"]=MAX_CONNECTIONS_PER_PLAYER
+        with self.assertRaises(IllegalMove): g.place("A","EUROPE")
+
+    def test_bot_removes_surplus_to_reopen_capacity_lock(self):
+        g=Game(["A","B"],seed=6)
+        for p in g.players.values(): p.connections.clear()
+        g.players["A"].connections["ASIA"]=2; g.players["B"].connections["ASIA"]=1
+        self.assertEqual(g.total_connections("ASIA"),g.capacity)
+        self.assertEqual(locked_region_exit(g,"A"),[{"kind":"remove","region":"ASIA"}])
 
 if __name__ == "__main__": unittest.main()
